@@ -282,40 +282,134 @@ html, body, #root {
   color: #0f2018;
 }
 
-/* ── Textarea wrapper ─────────────────────────────────────────────────────── */
+/* ── Formatting toolbar ───────────────────────────────────────────────────── */
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px 28px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all 0.15s;
+  min-width: 32px;
+  line-height: 1;
+}
+
+.toolbar-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.toolbar-btn.is-active { background: var(--accent-glow); color: var(--accent); }
+.toolbar-divider { width: 1px; background: var(--border); margin: 3px 4px; }
+
+/* ── Tiptap ProseMirror editor ────────────────────────────────────────────── */
 .editor-body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px 0;
+  padding: 20px 28px 0;
   gap: 12px;
   overflow: hidden;
 }
 
-.editor-textarea {
+.editor-content-wrap {
   flex: 1;
-  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ProseMirror {
+  flex: 1;
+  min-height: 300px;
+  padding: 20px;
   background: var(--bg-panel);
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 20px;
-  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 0.95rem;
-  line-height: 1.75;
-  resize: none;
+  line-height: 1.8;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
-  overflow-y: auto;
+  caret-color: var(--accent);
 }
 
-.editor-textarea:focus {
+.ProseMirror-focused {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
-.editor-textarea::placeholder {
+.ProseMirror p { margin: 0 0 0.6em; }
+.ProseMirror p:last-child { margin-bottom: 0; }
+.ProseMirror h1 { font-size: 1.6rem; font-weight: 700; margin: 0.8em 0 0.4em; color: var(--text-primary); }
+.ProseMirror h2 { font-size: 1.25rem; font-weight: 600; margin: 0.6em 0 0.3em; color: var(--text-primary); }
+.ProseMirror strong { font-weight: 700; color: #fff; }
+.ProseMirror em { font-style: italic; color: var(--text-secondary); }
+.ProseMirror u { text-decoration: underline; text-underline-offset: 3px; }
+.ProseMirror s { text-decoration: line-through; opacity: 0.6; }
+.ProseMirror code {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.88em;
+  color: #a855f7;
+}
+.ProseMirror ul, .ProseMirror ol { padding-left: 1.4em; margin: 0.4em 0; }
+.ProseMirror li { margin: 0.2em 0; }
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1em;
+  margin: 0.6em 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Placeholder text */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
   color: var(--text-muted);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* ── Collaboration cursors (other users) ──────────────────────────────────── */
+.collaboration-cursor__caret {
+  border-left: 2px solid;
+  border-right: 2px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+
+.collaboration-cursor__label {
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  left: -1px;
+  line-height: 1;
+  padding: 2px 5px;
+  position: absolute;
+  top: -1.5em;
+  user-select: none;
+  white-space: nowrap;
+  opacity: 0.9;
 }
 
 /* ── Editor footer ────────────────────────────────────────────────────────── */
@@ -552,6 +646,73 @@ html, body, #root {
 @keyframes toastOut {
   from { opacity: 1; transform: translateY(0); }
   to { opacity: 0; transform: translateY(10px); }
+}
+
+/* ── Revision History panel ───────────────────────────────────────────────── */
+.history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.history-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 75vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: slideUp 0.25s ease;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.history-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background var(--transition);
+}
+
+.history-item:hover { background: var(--bg-hover); }
+
+.history-time {
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.history-preview {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */

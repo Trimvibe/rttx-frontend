@@ -48,7 +48,7 @@ export default function UsernameModal({ onJoin }) {
               ref={inputRef}
               className="input-field"
               type="text"
-              placeholder="e.g. Alice, Bob, Charlie…"
+              placeholder="e.g. Sarthat, Soham…"
               value={username}
               onChange={(e) => {
                 setUsername(e.target.value);

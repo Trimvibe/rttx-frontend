@@ -1,97 +1,71 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import * as Y from 'yjs';
+import { SocketIOAwareness } from './SocketIOProvider';
 
-// In dev this falls back to localhost. In production, Vercel injects VITE_SOCKET_URL
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+const STOP_TYPING_DELAY = 1500;
 
-// How long to wait after the last keystroke before telling others you stopped typing
-const STOP_TYPING_DELAY = 1500; // ms
+// ydoc and awareness are created outside the hook so they're stable
+// across React re-renders and available immediately (before socket connects)
+export const ydoc      = new Y.Doc();
+export const awareness = new SocketIOAwareness(ydoc);
 
 export function useSocket() {
-  // We store the socket in a ref so it persists across renders without causing them
-  const socketRef = useRef(null);
-
-  // Timer ref for the stop-typing debounce — cleared on every new keystroke
+  const socketRef          = useRef(null);
   const stopTypingTimerRef = useRef(null);
 
-  // This flag is the key to avoiding an infinite echo loop.
-  // When a remote text-change arrives, we set this to true before updating state.
-  // The onChange handler checks this and skips re-emitting if it's set.
-  const isRemoteUpdateRef = useRef(false);
+  const [connected,   setConnected]   = useState(false);
+  const [users,       setUsers]       = useState([]);
+  const [typingUser,  setTypingUser]  = useState(null);
+  const [history,     setHistory]     = useState([]);
 
-  const myUsernameRef = useRef('');
-
-  const [connected, setConnected] = useState(false);
-  const [users, setUsers] = useState([]);
-  const [content, setContent] = useState('');
-  const [typingUser, setTypingUser] = useState(null); // { username, color }
-
-  // Create the socket connection once when the app loads
-  // The empty [] means this effect never re-runs
   useEffect(() => {
-    const socket = io(SOCKET_URL, {
-      // Try WebSocket first, fall back to HTTP polling if needed
-      transports: ['websocket', 'polling'],
-    });
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
+    // Wire the awareness bridge to this socket so cursor events flow through
+    awareness.attachSocket(socket);
+
+    socket.on('connect',    () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
 
-    // Server sends this right after we join — the current doc + who's online
-    socket.on('init', ({ content: initContent, users: initUsers }) => {
-      isRemoteUpdateRef.current = true; // mark as remote so onChange doesn't re-emit
-      setContent(initContent);
+    // Server sends us the current Yjs state + peers + history when we first join
+    socket.on('init', ({ yjsState, users: initUsers, history: initHistory }) => {
+      if (yjsState?.length) {
+        Y.applyUpdate(ydoc, new Uint8Array(yjsState), 'server');
+      }
       setUsers(initUsers);
+      setHistory(initHistory || []);
     });
 
-    // Another user changed the document — update our textarea
-    socket.on('text-change', (newContent) => {
-      isRemoteUpdateRef.current = true; // same here — don't echo this back
-      setContent(newContent);
+    // Relay incoming Yjs updates from other clients into our local doc
+    socket.on('y-update', (update) => {
+      Y.applyUpdate(ydoc, new Uint8Array(update), 'server');
     });
 
-    // Server pushed a fresh user list (someone joined or left)
-    socket.on('user-list', (updatedUsers) => {
-      setUsers(updatedUsers);
+    socket.on('user-list',      setUsers);
+    socket.on('history-update', setHistory);
+    socket.on('typing',         setTypingUser);
+    socket.on('stop-typing',    () => setTypingUser(null));
+
+    // Send any local Yjs changes to the server (ignore updates that came FROM server)
+    ydoc.on('update', (update, origin) => {
+      if (origin !== 'server') {
+        socket.emit('y-update', Array.from(update));
+      }
     });
 
-    // Someone else is typing — show their name + animated dots
-    socket.on('typing', (data) => {
-      setTypingUser(data);
-    });
-
-    // They stopped — hide the indicator
-    socket.on('stop-typing', () => {
-      setTypingUser(null);
-    });
-
-    // Clean up when the component unmounts (e.g. page nav)
-    return () => {
-      socket.disconnect();
-    };
+    return () => socket.disconnect();
   }, []);
 
-  // Called once when the user submits the username modal
+  // Send username + our Yjs clientID so server can track our cursor on disconnect
   const join = useCallback((username) => {
-    myUsernameRef.current = username;
-    socketRef.current?.emit('join', username);
+    socketRef.current?.emit('join', { username, clientID: ydoc.clientID });
   }, []);
 
-  // Called on every keystroke in the editor
-  const handleContentChange = useCallback((newContent) => {
-    // If this update came from a remote user, reset the flag and bail out.
-    // Without this check we'd emit the change back to the server, causing an echo loop.
-    if (isRemoteUpdateRef.current) {
-      isRemoteUpdateRef.current = false;
-      return;
-    }
-
-    // It's our own keystroke — broadcast it
-    socketRef.current?.emit('text-change', newContent);
-
-    // Tell others we're typing, and reset the stop-typing timer.
-    // clearTimeout is safe to call even if no timer is set.
+  // Debounced typing indicator — fires stop-typing 1.5s after the last keystroke
+  const handleTyping = useCallback(() => {
     socketRef.current?.emit('typing');
     clearTimeout(stopTypingTimerRef.current);
     stopTypingTimerRef.current = setTimeout(() => {
@@ -99,16 +73,18 @@ export function useSocket() {
     }, STOP_TYPING_DELAY);
   }, []);
 
+  // Save a plain-text snapshot for revision history
+  const saveSnapshot = useCallback((text) => {
+    socketRef.current?.emit('save-snapshot', text);
+  }, []);
+
   return {
-    socket: socketRef.current,
     connected,
     users,
-    content,
-    setContent,
     typingUser,
-    myUsername: myUsernameRef.current,
+    history,
     join,
-    handleContentChange,
-    isRemoteUpdateRef,
+    handleTyping,
+    saveSnapshot,
   };
 }
