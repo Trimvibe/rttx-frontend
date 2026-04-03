@@ -63,4 +63,10 @@ This project was built with the assistance of AI tools for code generation, arch
 
 This project was submitted for the **GUVI × HCL Hackathon** — Build a Real-Time Collaborative Text Editor.
 
+
+** This project has 2 repositories frontend/backend 
+backend repo url is given belwo- 
+https://github.com/Trimvibe/rttx-backend
+
+
 All AI assistance was used transparently as a development productivity tool, consistent with modern software engineering practices.
