@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import TypingIndicator from './TypingIndicator';
 
+// Count words by splitting on any whitespace (handles double spaces, newlines, etc.)
 function getWordCount(text) {
   const trimmed = text.trim();
-  if (!trimmed) return 0;
+  if (!trimmed) return 0; // empty string would give [""] → 1 word without this check
   return trimmed.split(/\s+/).length;
 }
 
@@ -14,38 +15,36 @@ function getCharCount(text) {
 export default function Editor({ content, setContent, onContentChange, typingUser }) {
   const [showToast, setShowToast] = useState(false);
   const toastTimerRef = useRef(null);
-  const isRemoteRef = useRef(false);
-
-  // When content changes from outside (remote), mark it so onChange doesn't re-emit
-  // We rely on isRemoteUpdateRef from useSocket; here we just track locally
   const textareaRef = useRef(null);
 
-  // Preserve cursor position when remote update arrives
-  const prevSelectionRef = useRef({ start: 0, end: 0 });
-
+  // When the user types, update local state and broadcast to the server
   const handleChange = (e) => {
     const newValue = e.target.value;
     setContent(newValue);
-    onContentChange(newValue);
+    onContentChange(newValue); // this is the socket emit (handled in useSocket)
   };
 
   const handleShareLink = async () => {
     try {
+      // Modern clipboard API — works on HTTPS and localhost
       await navigator.clipboard.writeText(window.location.href);
     } catch {
-      // Fallback for browsers that block clipboard
+      // Fallback for HTTP deployments where clipboard API is blocked
       const el = document.createElement('textarea');
       el.value = window.location.href;
       document.body.appendChild(el);
       el.select();
-      document.execCommand('copy');
+      document.execCommand('copy'); // old but reliable
       document.body.removeChild(el);
     }
+
+    // Show the success toast and auto-hide it after 2 seconds
     clearTimeout(toastTimerRef.current);
     setShowToast(true);
     toastTimerRef.current = setTimeout(() => setShowToast(false), 2000);
   };
 
+  // Clean up the timer if the component unmounts while toast is showing
   useEffect(() => {
     return () => clearTimeout(toastTimerRef.current);
   }, []);
@@ -55,9 +54,10 @@ export default function Editor({ content, setContent, onContentChange, typingUse
 
   return (
     <>
-      {/* ── Toolbar ── */}
+      {/* Top bar with document status and action buttons */}
       <div className="editor-header">
         <div className="editor-title">
+          {/* Pulsing green dot to show the doc is live */}
           <div className="doc-dot" aria-hidden="true" />
           Shared Document
         </div>
@@ -74,7 +74,7 @@ export default function Editor({ content, setContent, onContentChange, typingUse
         </div>
       </div>
 
-      {/* ── Main editing area ── */}
+      {/* The main editing area */}
       <div className="editor-body">
         <textarea
           id="collaborative-textarea"
@@ -87,10 +87,11 @@ export default function Editor({ content, setContent, onContentChange, typingUse
           spellCheck={true}
         />
 
-        {/* Footer row: typing indicator + word count */}
+        {/* Footer: typing indicator on the left, word/char count on the right */}
         <div className="editor-footer">
           <TypingIndicator typingUser={typingUser} />
 
+          {/* Updates live as you type */}
           <div className="word-count" aria-live="polite">
             <span>
               <strong>{words}</strong> {words === 1 ? 'word' : 'words'}
@@ -102,7 +103,7 @@ export default function Editor({ content, setContent, onContentChange, typingUse
         </div>
       </div>
 
-      {/* ── Toast notification ── */}
+      {/* Toast notification — pops up after clicking Share */}
       {showToast && (
         <div className="toast" role="status" aria-live="polite">
           <span aria-hidden="true">✅</span> Link copied to clipboard!

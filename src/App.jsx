@@ -5,9 +5,12 @@ import UserList from './components/UserList';
 import Editor from './components/Editor';
 
 export default function App() {
+  // Controls whether we show the username gate or the actual editor
   const [joined, setJoined] = useState(false);
   const [myUsername, setMyUsername] = useState('');
 
+  // Pull everything we need from the socket hook —
+  // it handles all the real-time logic so this component stays clean
   const {
     connected,
     users,
@@ -19,26 +22,23 @@ export default function App() {
     isRemoteUpdateRef,
   } = useSocket();
 
+  // When the user submits the modal, register with the server and show the editor
   const handleJoin = useCallback((username) => {
     setMyUsername(username);
     join(username);
     setJoined(true);
   }, [join]);
 
-  // Wrap setContent to always reset the remote flag before updating from remote
-  const handleRemoteContent = useCallback((newContent) => {
-    isRemoteUpdateRef.current = true;
-    setContent(newContent);
-  }, [isRemoteUpdateRef, setContent]);
-
   return (
     <>
-      {/* ── Username gate ── */}
+      {/* Username modal — blocks the editor until the user picks a name */}
       {!joined && <UsernameModal onJoin={handleJoin} />}
 
-      {/* ── Main editor layout ── */}
+      {/* Main layout — always rendered so the socket connects early,
+          but visually hidden behind the modal until the user joins */}
       <div className="app" aria-hidden={!joined}>
-        {/* Left sidebar: user list */}
+
+        {/* Left sidebar: branding + online users */}
         <aside className="sidebar" aria-label="Connected users sidebar">
           <div className="sidebar-brand">
             <div className="sidebar-brand-icon" aria-hidden="true">✏️</div>
@@ -49,9 +49,10 @@ export default function App() {
 
           <div className="sidebar-divider" />
 
+          {/* List of everyone currently in the document */}
           <UserList users={users} myUsername={myUsername} />
 
-          {/* Connection status */}
+          {/* Live connection indicator at the bottom of the sidebar */}
           <div
             style={{
               marginTop: 'auto',
@@ -77,7 +78,7 @@ export default function App() {
           </div>
         </aside>
 
-        {/* Right: editor panel */}
+        {/* Right panel: the actual editor */}
         <main className="editor-area" aria-label="Document editor">
           <Editor
             content={content}
